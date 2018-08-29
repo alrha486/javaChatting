@@ -1,0 +1,187 @@
+import java.awt.Toolkit;
+import java.io.*;
+import java.text.*;
+import java.net.Socket;
+import java.sql.*;
+import java.util.Date;
+import java.text.SimpleDateFormat;
+
+public class ChatClient {
+
+   private Socket socket;
+   private String serverIP = "210.123.254.86";
+   private BufferedReader inputFromKBD;
+   private String name = "";
+   
+
+   public ChatClient() {
+   }
+
+   public static void main(String[] args) {
+      new ChatClient().start();
+   }
+
+   private void start() {
+      inputFromKBD = new BufferedReader(new InputStreamReader(System.in));
+
+      try {
+         socket = new Socket(serverIP, 9000);
+         System.out.println("채팅방에 입장하셨습니다. 닉네임을 입력해주세요.");
+         System.out.println("채팅방 기능 확인하기      /help");
+         name = inputFromKBD.readLine();
+         
+         new ClientReceiver(socket).start();
+         clientSender();
+      } catch (IOException e) {
+
+      }
+   }
+   
+     private static void clearScreen() {
+       for (int i = 0; i < 80; i++)
+         System.out.println("");
+     }
+   private void clientSender() {
+
+      PrintWriter output;
+      String outputLine = "";
+            
+      try {
+         output = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"));
+         output.println(name);
+         output.flush();
+         
+         while ((outputLine = inputFromKBD.readLine()) != null) {
+        	 String hh[] = {"씨발","개새끼","바보","멍청이","못난아","죽을래","뒤진다","엿먹어","엿","꺼져","병신"}; 
+        	 boolean a = false;
+        	 for(int i=0;i<hh.length;i++){
+             	 if(outputLine.indexOf(hh[i])==0){
+        		 output = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"));
+                 output.println("바른말 고운말을 사용합시다.");
+                 a = true;
+                 output.flush();
+        	 }
+        	 }
+        	 if(a == false){
+            output.println(outputLine);
+            output.flush();
+        	 }
+            if (outputLine.equalsIgnoreCase("/quit")) {
+               System.out.println(""+ name +" 님이 채팅방에서 나가셨습니다.");
+               System.exit(0);
+            }
+            
+            else if(outputLine.equalsIgnoreCase("/help")) {
+               System.out.println("/make      <회원가입>");
+               System.out.println("/Login     <로그인>");
+               System.out.println("/delete    <회원탈퇴>");
+               System.out.println("/question  <질문하기>");
+               System.out.println("/who       <사용자목록>");
+               System.out.println("/quit      <채팅방나가기>");
+               System.out.println("/to 상대방이름 메세지            <귓속말하기>");
+               System.out.println("/change 변경하고싶은대화명   <대화명 바꾸기>");            
+            }
+            else if(outputLine.equalsIgnoreCase("/clear")){
+               clearScreen();
+               System.out.println("청소완료");
+            }
+            else if(outputLine.equalsIgnoreCase("/who")){
+               System.out.println("현재 유저 목록입니다.");
+            }
+            else if(outputLine.equalsIgnoreCase("/to")){
+               System.out.println("귓속말을 보내셨습니다.");
+            }
+            else if(outputLine.equalsIgnoreCase("/question")){
+               System.out.println("서버에게 문의하였습니다.");
+            }
+         }
+      } catch (UnsupportedEncodingException e) {
+         e.printStackTrace();
+      } catch (IOException e) {
+         e.printStackTrace();
+         
+      } finally {
+         try {
+            socket.close();
+         } catch (IOException e) {
+            e.printStackTrace();
+         }
+      }
+   }
+
+   private class ClientReceiver extends Thread {
+
+      Socket socket;
+
+      BufferedReader inputFromServer = null;
+
+      public ClientReceiver(Socket socket) {
+         this.socket = socket;
+
+         try {
+            
+            
+            inputFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
+//            inputLine = inputFromServer.readLine();
+//            System.out.println(inputLine);
+         }  catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+         }catch (IOException e) {
+
+         }
+
+      }
+
+      public void run() {
+
+         String inputLine;
+         Toolkit toolkit = Toolkit.getDefaultToolkit(); //비프음
+         
+         try {
+            
+            while ((inputLine = inputFromServer.readLine()) != null) {
+               toolkit.beep();
+               
+                if (inputLine.equalsIgnoreCase("/quit")) {
+                    System.out.println(""+ name +" 님이 채팅방에서 나갔습니다.");
+                    System.exit(0);
+                 }
+                else if (inputLine.equalsIgnoreCase("/help")) {
+                     System.out.println("귓속말을 보내고 싶다면 /to 상대방아이디");
+                       System.out.println("채팅을 끝내고 싶다면 /quit");
+                       System.out.println("채팅창을 지우고 싶다면 /clear");
+                       System.out.println("마스터에게 문의하고 싶다면 /question");
+                       System.out.println("들어와있는 유저가 궁금하다면 /who");
+                 }
+                else if (inputLine.equalsIgnoreCase("/to")) {
+                    System.out.println(""+ name +" 님이 귓속말을 보내셨습니다.");
+                 }
+                else if (inputLine.equalsIgnoreCase("/clear")) {
+                    System.out.println("클리어 되었습니다.");
+                 }
+                else if (inputLine.equalsIgnoreCase("/who")) {
+                    System.out.println("현재 들어와 있는 인원입니다.");
+                 }
+
+               System.out.println(inputLine);
+               
+            }
+         } catch (IOException e) {
+            e.printStackTrace();
+         } finally {
+            try {
+               if (inputFromServer != null)
+                  inputFromServer.close();
+               if (socket != null)
+                  socket.close();
+            } catch (IOException e) {
+            }
+
+         }
+      }
+   }
+   static String getTime(){
+	   SimpleDateFormat f=new SimpleDateFormat("[hh:mm:ss]");
+	   return f.format(new Date()); //시간 보여주는 함수
+	}
+}

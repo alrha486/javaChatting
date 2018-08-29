@@ -1,0 +1,243 @@
+import java.awt.Toolkit;
+import java.io.*;
+import java.util.Iterator;
+import java.util.concurrent.ConcurrentHashMap;
+import java.text.*;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.sql.*;
+import java.io.DataOutputStream;
+import java.util.Date;
+import java.text.SimpleDateFormat;
+
+public class Chatserver1 {
+
+	private ConcurrentHashMap<String, PrintWriter> hm_clients; // 회원정보 관리하는 해시맵
+	private ConcurrentHashMap<String, String> logon; // 회원 로그인 정보 관리하는 해시맵
+	private ServerSocket serverSocket;
+
+	public Chatserver1() {
+		hm_clients = new ConcurrentHashMap<String, PrintWriter>();
+		logon = new ConcurrentHashMap<String, String>();
+	} // default constructor
+
+	public static void main(String[] args) {
+		new Chatserver1().start();
+	} // main
+
+	private void start() {
+		Socket socket = null;
+
+		try {
+			serverSocket = new ServerSocket(9000);
+			// 9300번 포트의 서버 소켓 생성
+			System.out.println(getTime() + "서버가 시작되었습니다.");
+			System.out.println("Server IP Address: " + InetAddress.getLocalHost().getHostAddress() + "port: "
+					+ serverSocket.getLocalPort());
+			while (true) {
+				socket = serverSocket.accept();
+				// serverSocket의 연결요청이 온 클라이언트의 소켓을 생성
+				// 클라이언트와의 소켓은 1:1 연결
+				System.out.println("\n=====클라이언트가 연결되었습니다.======\n");
+				System.out.println("Client IP Address: " + socket.getInetAddress().getHostAddress() + " prot: "
+						+ socket.getPort());
+
+				new ChatThread(socket).start();
+
+			} // while
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	} // start
+
+	private class ChatThread extends Thread {
+		private Socket threadSocket;
+		private BufferedReader input;
+		private PrintWriter output;
+		private String name = "";
+
+		public ChatThread(Socket socket) {
+			this.threadSocket = socket;
+
+			try {
+
+				input = new BufferedReader(new InputStreamReader(threadSocket.getInputStream(), "UTF-8"));
+				output = new PrintWriter(new OutputStreamWriter(threadSocket.getOutputStream(), "UTF-8"));
+
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		public void run() {
+			String inputLine = null;
+			Toolkit toolkit = Toolkit.getDefaultToolkit(); // 비프음
+
+			try {
+				threadSocket.getPort();
+				name = input.readLine();
+
+				hm_clients.put(name, output);
+
+				System.out.println("\n [" + name + "]" + threadSocket.getInetAddress() + " : " + threadSocket.getPort()
+						+ "님이 대화방에 접속하셨습니다.");
+
+				sendToAll("" + name + "" + "님이" + getTime() + "에 대화방에 접속하였습니다.");
+
+				System.out.println("\n 현재 " + hm_clients.size() + "명이 연결 중 입니다...\n");
+
+				while ((inputLine = input.readLine()) != null) {
+					String Log[] = inputLine.split(" ");
+
+					toolkit.beep();
+
+					if (inputLine.equalsIgnoreCase("/quit")) {
+						output.println("종료되었습니다.");
+						break;
+					}
+
+					else if ((inputLine.indexOf("/to")) == 0) {
+						sendTo(inputLine);
+					}
+
+					else if ((inputLine.indexOf("/question")) == 0) {
+						System.out.println(getTime() + "[" + name + "]" + inputLine);
+					} // 문의하기
+
+					else if ((inputLine.indexOf("/make")) == 0) { // 회원가입
+						Iterator<String> asd = logon.keySet().iterator();
+						while (asd.hasNext()) {
+							try {
+								if (Log[1].equals(asd.next())) {
+									PrintWriter pw = hm_clients.get(name);
+									pw.println("이미 등록 된 ID입니다.");
+									pw.flush();
+									return;
+								}
+							} catch (Exception e) {
+								e.printStackTrace();
+							}
+						}
+						logon.put(Log[1], Log[2]);
+						output.println("회원가입에 성공하셨습니다.");
+						output.flush();
+					}
+
+					else if ((inputLine.indexOf("/Login")) == 0) { // 로그인
+						Iterator<String> asd = logon.keySet().iterator();
+						while (asd.hasNext()) {
+							String a = asd.next(); // a는 ID/ logon.get()은 비밀번호
+							if (a.equals(Log[1]) && logon.get(a).equals(Log[2])) {
+								output.println("로그인에 성공했습니다.");
+								output.flush();
+							} else if (!a.equals(Log[1]) && logon.get(a).equals(Log[2])) {
+								output.println("ID를 확인해주세요!");
+								output.flush();
+							} else if (a.equals(Log[1]) && !logon.get(a).equals(Log[2])) {
+								output.println("PW를 확인해주세요!");
+								output.flush();
+							}
+
+						}
+
+					}
+
+					else if ((inputLine.indexOf("/delete")) == 0) {
+						logon.remove(Log[1]);
+						PrintWriter pw = hm_clients.get(name);
+						pw.println("회원탈퇴가 완료되었습니다.");
+						pw.flush();
+					}
+
+					else if ((inputLine.indexOf("/change")) == 0) {
+						change(inputLine);
+						output.println("회원님의 아이디가 " + "[" + name + "]" + "으로 변경되었습니다.");
+						output.flush();
+					} // 문의하기
+
+					else if ((inputLine.indexOf("/who")) == 0) {
+						for (int i = 0; i < hm_clients.size(); i++) {
+							output.println(hm_clients.keySet());
+							output.println(hm_clients.size() + "명이 접속 중 입니다.");
+							output.flush();
+						}
+					} // 현재 들어왔는 유저 보여주기
+
+					else {
+						sendToAll(getTime() + "[" + name + "] ::" + inputLine);
+					}
+				}
+
+			} catch (Exception e) {
+			} finally {
+
+				hm_clients.remove(name);
+
+				sendToAll(getTime() + "[" + name + threadSocket.getInetAddress() + " : " + threadSocket.getPort()
+						+ " ]  님이 대화방에 나가셨습니다.");
+
+				System.out.println("[" + name + "]" + threadSocket.getInetAddress() + " : " + threadSocket.getPort()
+						+ "님이 대화방에 나갔습니다.");
+
+				System.out.println("현재 " + hm_clients.size() + "명이 접속 중 입니다.");
+
+				try {
+					if (threadSocket != null)
+						threadSocket.close();
+				} catch (Exception e) {
+				}
+			}
+		}
+
+		private void sendTo(String inputLine) {
+			String fromToArr[] = inputLine.split(" ", 3);
+			if (fromToArr[2].length() > 0) {
+				Object obj = hm_clients.get(fromToArr[1]);
+
+				if (obj != null) {
+					PrintWriter pw = (PrintWriter) obj;
+					pw.println(" [#From  " + name + " ] " + fromToArr[2]);
+					pw.flush();
+				}
+			}
+		}
+
+		public void sendToAll(String inputline) {
+			Iterator<String> iterator = hm_clients.keySet().iterator();
+
+			while (iterator.hasNext()) {
+				try {
+					PrintWriter pw = hm_clients.get(iterator.next());
+					pw.println(inputline);
+					pw.flush();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+
+		private void change(String inputLine) {
+			String fromToArr[] = inputLine.split(" ", 2);
+
+			if (fromToArr[1].length() > 0) {// 아이디 변경
+				Object obj = hm_clients.get(fromToArr[1]);
+
+				hm_clients.remove(name);
+				hm_clients.put(fromToArr[1], output);
+				name = fromToArr[1];
+				return;
+
+			} else {
+				return;
+			}
+		}
+
+	}
+
+	static String getTime() {
+		SimpleDateFormat f = new SimpleDateFormat("[hh:mm:ss]");
+		return f.format(new Date()); // 시간 보여주는 함수
+	}
+
+}
